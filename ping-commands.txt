@@ -1,0 +1,82 @@
+
+
+
+
+
+# create 3 servers (1GB each) - (page 181)
+#scripts/dm-swarm-5.sh
+scripts/01-dm-swarm-marco-3.sh
+
+eval $(docker-machine env swarm-1)
+
+docker node ls
+
+#start docker registry
+
+docker run -d -p 5000:5000 --restart=always --name registry registry:2.5.0
+
+docker build -t localhost:5000/pingaccess .
+
+docker push localhost:5000/pingaccess
+
+docker run -d --name pingaccess localhost:5000/pingaccess
+
+docker exec -it pingaccess bash
+
+# to stop and remove registry
+# docker stop registry && docker rm -v registry
+
+
+
+docker build -t localhost:5000/pingaccess . && \
+docker push localhost:5000/pingaccess && \
+docker run -d --name pingaccess localhost:5000/pingaccess && \
+docker exec -it pingaccess bash
+docker stop pingaccess && docker rm -v pingaccess
+
+docker build -t localhost:5000/pingaccessengine -f Dockerfile.paengine . && \
+docker push localhost:5000/pingaccessengine && \
+docker run -d --name pingaccessengine localhost:5000/pingaccessengine && \
+docker exec -it pingaccessengine bash
+docker stop pingaccessengine && docker rm -v pingaccessengine
+
+
+
+# create services
+scripts/dm-swarm-services-3.sh
+
+
+docker service ls
+
+
+
+docker service create \
+--name node-exporter \
+--mode global \
+--network proxy \
+--mount "type=bind,source=/proc,target=/host/proc" \
+--mount "type=bind,source=/sys,target=/host/sys" \
+--mount "type=bind,source=/,target=/rootfs" \
+prom/node-exporter:0.12.0 \
+-collector.procfs /host/proc \
+-collector.sysfs /host/proc \
+-collector.filesystem.ignored-mount-points \
+"^/(sys|proc|dev|host|etc)($|/)"
+
+
+docker service ps node-exporter
+
+
+UTIL_ID=$(docker ps -q --filter \
+label=com.docker.swarm.service.name=util)
+
+docker exec -it $UTIL_ID \
+apk add --update curl drill
+
+docker exec -it $UTIL_ID \
+curl http://node-exporter:9100/metrics
+
+
+# destroy everything (page 220)
+docker-machine rm -f swarm-1 swarm-2 swarm-3
+# swarm-4 swarm-5
